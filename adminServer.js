@@ -1,98 +1,199 @@
 
 const express = require('express')
 const bodyParser = require("body-parser");
+const { exit } = require('process');
+
 const app = express()
 const port = 8000
 
-const coilsData = {
-    "::ffff:192.168.1.42": [],
-    "::ffff:192.168.1.43": [],
-    "::ffff:192.168.1.44": []
-};
-const discreteData = {
-    "::ffff:192.168.1.42": [],
-    "::ffff:192.168.1.43": [],
-    "::ffff:192.168.1.44": []
-};
-const holdingData = {
-    "::ffff:192.168.1.42": [],
-    "::ffff:192.168.1.43": [],
-    "::ffff:192.168.1.44": []
-};
-const inpostData = {
-    "::ffff:192.168.1.42": [],
-    "::ffff:192.168.1.43": [],
-    "::ffff:192.168.1.44": []
-};
-let logData = {
-    "::ffff:192.168.1.42": [],
-    "::ffff:192.168.1.43": [],
-    "::ffff:192.168.1.44": []
-};
+var data = {};
 
-const getIP = function(req){
-    return req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+/**
+ * Init server
+ */
+
+const IP_PREFIX = "::ffff:";
+{
+    try {
+        const fs = require('fs');
+        const path = './config.json';
+        if(!fs.existsSync(path)){
+            const config = {
+                client:[]
+            }
+            fs.writeFileSync(path, JSON.stringify(config, null, 2));
+        }
+        let config = JSON.parse(fs.readFileSync(path));
+
+        config.client.forEach(ip => {
+            data[`${IP_PREFIX}${ip}`] = {
+                coil: [],
+                discrete: [],
+                holding: [],
+                input: [],
+                log: []
+            }
+        });
+    } catch (error) {
+        console.log(error);
+        exit();
+    }
+}
+
+
+const getReqInfo = function(req){
+    return {
+        ip: req.headers['x-forwarded-for'] || req.socket.remoteAddress,
+        mbAddress: req.query.address,
+        mbCount: req.query.count
+    }
+}
+
+const logAction = function(ip, action, type, address, count, values){
+    let obj = data[ip];
+    if (obj !== undefined) {
+        obj.log.push({
+            timestamp: new Date(),
+            action: action,
+            type: type,
+            address: address,
+            count: count,
+            values: values
+        });
+    }
+}
+
+const readData = function(req, type) {
+    const reqInfo = getReqInfo(req);
+    const address = reqInfo.mbAddress;
+    const count = reqInfo.mbCount;
+
+    let res = [];
+    const obj = data[reqInfo.ip];
+    if (obj !== undefined) {
+        const buf = obj[type];
+        for (let i = 0; i < count; i++) {
+            res.push(buf[address + i] !== undefined ? buf[address + i] : 0);
+        }
+        logAction(reqInfo.ip, "read", address, count, res);
+    }
+    
+    return res;
+}
+
+const writeData = function(req, type, values){
+    const reqInfo = getReqInfo(req);
+    const address = reqInfo.mbAddress;
+    const count = reqInfo.mbCount;
+    
+    const obj = data[reqInfo.ip];
+    if (obj !== undefined) {
+        const buf = obj[type];
+        for (let i = 0; i < count; i++) {
+            buf[address + i] = values[i];
+        }
+        logAction(reqInfo.ip, "write", address, count, values);
+    }
 }
 
 app.use(bodyParser.urlencoded({ extended: false }));
 app.use(bodyParser.json());
 
+/**
+ * Modbus read
+ */
 app.get('/coil', (req, res) => {
-    let resBuf = [];
-
-    const ip = getIP(req);
-    if (coilData[ip] === undefined) {
-        return res;
-    }
-
-    const address = req.query.address;
-    const count = req.query.count;
-
-    for (let index = 0; index < count; index++) {
-        let value = coilData[ip][address + index];
-        if (value === undefined) {
-            value = 0;
-        }
-        resBuf.push(value);
-    }
-
+    const resBuf = readData(req, "coil");
+    res.setHeader('Content-Type', 'application/json');
     res.send(resBuf);
 })
 
-app.post('/coil', (req, res) => {
-    console.log(req.body)
-    res.send("ok");
-})
-
 app.get('/discrete', (req, res) => {
-    res.send('Hello World!')
+    const resBuf = readData(req, "discrete");
+    res.setHeader('Content-Type', 'application/json');
+    res.send(resBuf);
 })
 
 app.get('/input', (req, res) => {
-    let value = Math.floor(Math.random()*100);
-    console.log(value);
-    res.send([4,10,20,30,0,0,0,0,0,value])
+    const resBuf = readData(req, "input");
+    res.setHeader('Content-Type', 'application/json');
+    res.send(resBuf);
 })
 
 app.get('/holding', (req, res) => {
-    res.send('Hello World!')
+    const resBuf = readData(req, "holding");
+    res.setHeader('Content-Type', 'application/json');
+    res.send(resBuf);
+})
+
+/**
+ * Modbus write
+ */
+app.post('/coil', (req, res) => {
+    writeData(req, "coil", req.body);
+    res.send("ok");
 })
 
 app.post('/holding', (req, res) => {
-    console.log(req.body)
-    res.send('Hello!')
-})
-
-app.post('/log', (req, res) => {
-    console.log(req.body)
-    res.send('Logged')
+    writeData(req, "coil", req.body);
+    res.send('ok')
 })
 
 app.get('/test', (req, res) => {
-    console.log("aa");
-    res.send(`Request received from IP ${getIP(req)}`)
+    const reqInfo = getReqInfo(req);
+    res.send(`Request received from IP ${reqInfo.ip}`)
 })
 
+/**
+ * Logging
+ */
+app.get('/log/clean', (req, res) => {
+    const ip = `${IP_PREFIX}${req.query.address}`;
+    if (data[ip] !== undefined) {
+        data[ip].log = [];
+        res.status(200).send("Log history cleanup done!");
+    } else {
+        res.status(404).send("IP address not registered!"); 
+    }
+})
+
+app.get('/log', (req, res) => {
+    const ip = `${IP_PREFIX}${req.query.address}`;
+    res.setHeader('Content-Type', 'application/json');
+    if (data[ip] !== undefined) {
+        res.send(JSON.stringify(data[ip]?.log));
+    } else {
+        res.send(JSON.stringify({error: "IP address not registered!"}));
+    }
+})
+
+/**
+ * Control
+ */
+app.put('/set', (req, res) => {
+    const reqInfo = getReqInfo(req);
+    const address = reqInfo.mbAddress;
+    const count = reqInfo.mbCount;
+    const type = req.query.type
+    const values = req.body;
+
+    const obj = data[reqInfo.ip];
+    res.setHeader('Content-Type', 'application/json');
+    if (obj !== undefined) {
+        const buf = obj[type];
+        for (let i = 0; i < count; i++) {
+            buf[address + i] = values[i];
+        }
+        logAction(reqInfo.ip, "set", address, count, values);
+        res.send(JSON.stringify(values));
+    } else {
+        res.send(JSON.stringify({error: "IP " + reqInfo.ip + " address not registered!"}));
+    }
+})
+
+/**
+ * Server start
+ */
 app.listen(port, () => {
     console.log(`Example app listening on port ${port}`)
 })
