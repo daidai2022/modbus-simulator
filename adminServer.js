@@ -167,6 +167,11 @@ app.get('/log', (req, res) => {
     }
 })
 
+app.get('/list', (req, res) => {
+    res.setHeader('Content-Type', 'application/json');
+    res.send(JSON.stringify(Object.keys(data)));
+})
+
 /**
  * Control
  */
