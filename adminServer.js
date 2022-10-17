@@ -60,6 +60,9 @@ const logAction = function(ip, action, type, address, count, values){
             count: count,
             values: values
         });
+        if (obj.log.length > 10000) {
+            obj.log.shift();
+        }
     }
 }
 
