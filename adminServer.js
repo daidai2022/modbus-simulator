@@ -76,6 +76,8 @@ const readData = function(req, type) {
             res.push(buf[address + i] !== undefined ? buf[address + i] : 0);
         }
         logAction(reqInfo.ip, "read", address, count, res);
+    } else {
+        console.log("Unregistered IP: " + reqInfo.ip);
     }
     
     return res;
@@ -93,6 +95,8 @@ const writeData = function(req, type, values){
             buf[address + i] = values[i];
         }
         logAction(reqInfo.ip, "write", address, count, values);
+    } else {
+        console.log("Unregistered IP: " + reqInfo.ip);
     }
 }
 
