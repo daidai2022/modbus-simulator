@@ -189,7 +189,9 @@ app.put('/set', (req, res) => {
     const type = req.query.type
     const values = req.body;
 
-    const obj = data[reqInfo.ip];
+    const targetIP = req.query.target;
+
+    const obj = data[targetIP];
     res.setHeader('Content-Type', 'application/json');
     if (obj !== undefined) {
         const buf = obj[type];
