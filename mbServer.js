@@ -28,6 +28,7 @@ const doRequest = function (action, type, address, count, values) {
                 break;
             }
         }
+        console.log(`  <-> Sync with admin for ${response}`);
         response = JSON.parse(response);
     } catch (error) {
         
