@@ -189,7 +189,7 @@ app.put('/set', (req, res) => {
     const type = req.query.type
     const values = req.body;
 
-    const targetIP = req.query.target;
+    const targetIP = `${IP_PREFIX}${req.query.target}`;
 
     const obj = data[targetIP];
     res.setHeader('Content-Type', 'application/json');
