@@ -39,8 +39,8 @@ const doRequest = function (action, type, address, count, values) {
 const getBuffer = function(type){
     switch(type){
         case "coil": return server.coils;
-        case "discrete": return server.coils;
-        case "holding": return server.discrete;
+        case "discrete": return server.discrete;
+        case "holding": return server.holding;
         case "input": return server.input;
     }
 }
