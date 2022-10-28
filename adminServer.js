@@ -44,8 +44,8 @@ const IP_PREFIX = "::ffff:";
 const getReqInfo = function(req){
     return {
         ip: req.headers['x-forwarded-for'] || req.socket.remoteAddress,
-        mbAddress: req.query.address,
-        mbCount: req.query.count
+        mbAddress: parseInt(req.query.address),
+        mbCount: parseInt(req.query.count)
     }
 }
 
@@ -78,7 +78,7 @@ const readData = function(req, type) {
         for (let i = 0; i < count; i++) {
             res.push(buf[address + i] !== undefined ? buf[address + i] : 0);
         }
-        logAction(reqInfo.ip, "read", address, count, res);
+        logAction(reqInfo.ip, "read", type, address, count, res);
     } else {
         console.log("Unregistered IP: " + reqInfo.ip);
     }
@@ -97,7 +97,7 @@ const writeData = function(req, type, values){
         for (let i = 0; i < count; i++) {
             buf[address + i] = values[i];
         }
-        logAction(reqInfo.ip, "write", address, count, values);
+        logAction(reqInfo.ip, "write", type, address, count, values);
     } else {
         console.log("Unregistered IP: " + reqInfo.ip);
     }
@@ -186,7 +186,7 @@ app.put('/set', (req, res) => {
     const reqInfo = getReqInfo(req);
     const address = reqInfo.mbAddress;
     const count = reqInfo.mbCount;
-    const type = req.query.type
+    const type = req.query.type;
     const values = req.body;
 
     const targetIP = `${IP_PREFIX}${req.query.target}`;
@@ -198,7 +198,7 @@ app.put('/set', (req, res) => {
         for (let i = 0; i < count; i++) {
             buf[address + i] = values[i];
         }
-        logAction(reqInfo.ip, "set", address, count, values);
+        logAction(reqInfo.ip, "set", type, address, count, values);
         res.send(JSON.stringify(values));
     } else {
         res.send(JSON.stringify({error: "IP " + reqInfo.ip + " address not registered!"}));
