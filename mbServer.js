@@ -2,10 +2,10 @@ const net = require('net')
 const modbus = require('jsmodbus')
 const request = require('sync-request')
 const netServer = new net.Server()
-const coils = Buffer.alloc(10000)
-const discrete = Buffer.alloc(10000)
-const holding = Buffer.alloc(10000)
-const input = Buffer.alloc(10000)
+const coils = Buffer.alloc(50000)
+const discrete = Buffer.alloc(50000)
+const holding = Buffer.alloc(50000)
+const input = Buffer.alloc(50000)
 
 const adminAddr = process.argv[2];
 const modbusPort = process.argv[3] || 8502;
@@ -113,7 +113,7 @@ const server = new modbus.server.TCP(netServer, {
 })
 
 server.on('connection', function (client) {
-    console.log('Connection begin: ' + client.socket.remoteAddress)
+    console.log(new Date().toISOString() + ' Connection begin: ' + client.socket.remoteAddress)
     client.socket.on('close', function (exception) {
         console.log('Connection end: ' + client.socket.remoteAddress)
     });

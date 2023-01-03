@@ -16,7 +16,8 @@ const IP_PREFIX = "::ffff:";
 {
     try {
         const fs = require('fs');
-        const path = './config.json';
+        const path = __dirname + '/config.json';
+	console.log(path);
         if(!fs.existsSync(path)){
             const config = {
                 client:[]
