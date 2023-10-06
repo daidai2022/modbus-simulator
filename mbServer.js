@@ -1,35 +1,77 @@
 const net = require('net')
 const modbus = require('jsmodbus')
 const request = require('sync-request')
+
+const express = require('express')
+const bodyParser = require("body-parser");
+const { exit } = require('process');
+const { write } = require('fs');
+
 const netServer = new net.Server()
 const coils = Buffer.alloc(50000)
 const discrete = Buffer.alloc(50000)
 const holding = Buffer.alloc(50000)
 const input = Buffer.alloc(50000)
 
-const adminAddr = process.argv[2];
-const modbusPort = process.argv[3] || 8502;
+const modbusPort = process.argv[2] || 8502;
+const adminAddr = process.argv[3];
+
+const app = express();
+const port = 8000;
+var data = {};
+
+const readValues = function (type, address, count) {
+    let res = [];
+    const buf = data[type];
+    for (let i = 0; i < count; i++) {
+        res.push(buf[address + i] !== undefined ? buf[address + i] : 0);
+    }
+    return res;
+}
+
+const writeValues = function (type, address, count, values) {
+    if(data[type] === undefined)
+        data[type] = [];
+
+    const buf = data[type];
+    for (let i = 0; i < count; i++) {
+        buf[address + i] = values[i];
+    }
+}
 
 const doRequest = function (action, type, address, count, values) {
     let response;
     try {
-        switch(action){
-            case "read": {
-                response = request('GET',
-                    `http://${adminAddr}/${type}?address=${address}&count=${count}`
-                )?.body?.toString();
-                break;
+        if(adminAddr !== undefined) {
+            switch(action){
+                case "read": {
+                    response = request('GET',
+                        `http://${adminAddr}/${type}?address=${address}&count=${count}`
+                    )?.body?.toString();
+                    break;
+                }
+                case "write": {
+                    response = request('POST',
+                        `http://${adminAddr}/${type}?address=${address}&count=${count}`,
+                        { json: values }
+                    )?.body?.toString();
+                    break;
+                }
             }
-            case "write": {
-                response = request('POST',
-                    `http://${adminAddr}/${type}?address=${address}&count=${count}`,
-                    { json: values }
-                )?.body?.toString();
-                break;
+            console.log(`  <-> Sync with admin for ${response}`);
+            response = JSON.parse(response);
+        } else {
+            switch (action) {
+                case "read": {
+                    response = readValues(type, address, count);
+                    break;
+                }
+                case "write": {
+                    writeValues(type, address, count, values);
+                    break;
+                }
             }
         }
-        console.log(`  <-> Sync with admin for ${response}`);
-        response = JSON.parse(response);
     } catch (error) {
         
     }
@@ -138,3 +180,127 @@ if (adminAddr === undefined) {
     console.log(`Connected with admin server: ${adminAddr}`);
 }
 netServer.listen(modbusPort)
+
+
+// -------------------------------------------- admin server
+const getReqInfo = function(req){
+    return {
+        ip: req.headers['x-forwarded-for'] || req.socket.remoteAddress,
+        mbAddress: parseInt(req.query.address),
+        mbCount: parseInt(req.query.count)
+    }
+}
+
+const logRequest = function(action, type, address, count, values){
+    if(data.log === undefined){
+        data.log = [];
+    }
+
+    data.log.push(`[${new Date().toISOString()}] action:${action} type:${type} addr:${address} count:${count} v:${values.toString()}`);
+    if (data.log.length > 10000) {
+        data.log.shift();
+    }
+}
+
+const readData = function(req, type) {
+    const address = reqInfo.mbAddress;
+    const count = reqInfo.mbCount;
+
+    logRequest("read", type, address, count, res);
+    return readValues(type, address, count);
+}
+
+const writeData = function(req, type, values){
+    const address = reqInfo.mbAddress;
+    const count = reqInfo.mbCount;
+    
+    writeValues(type, address, count, values);
+
+    logRequest("write", type, address, count, values);
+}
+
+app.use(bodyParser.urlencoded({ extended: false }));
+app.use(bodyParser.json());
+
+/**
+ * Modbus read
+ */
+app.get('/coil', (req, res) => {
+    const resBuf = readData(req, "coil");
+    res.setHeader('Content-Type', 'application/json');
+    res.send(resBuf);
+})
+
+app.get('/discrete', (req, res) => {
+    const resBuf = readData(req, "discrete");
+    res.setHeader('Content-Type', 'application/json');
+    res.send(resBuf);
+})
+
+app.get('/input', (req, res) => {
+    const resBuf = readData(req, "input");
+    res.setHeader('Content-Type', 'application/json');
+    res.send(resBuf);
+})
+
+app.get('/holding', (req, res) => {
+    const resBuf = readData(req, "holding");
+    res.setHeader('Content-Type', 'application/json');
+    res.send(resBuf);
+})
+
+/**
+ * Modbus write
+ */
+app.post('/coil', (req, res) => {
+    writeData(req, "coil", req.body);
+    res.send("ok");
+})
+
+app.post('/holding', (req, res) => {
+    writeData(req, "coil", req.body);
+    res.send('ok')
+})
+
+app.get('/test', (req, res) => {
+    const reqInfo = getReqInfo(req);
+    res.send(`Request received from IP ${reqInfo.ip}`)
+})
+
+/**
+ * Logging
+ */
+app.get('/log/clean', (req, res) => {
+    data.log = [];
+    res.status(200).send("Log history cleanup done!");  
+})
+
+app.get('/log', (req, res) => {
+    res.setHeader('Content-Type', 'application/json');
+    res.send(JSON.stringify(data.log));
+})
+
+/**
+ * Control
+ */
+app.put('/set', (req, res) => {
+    const reqInfo = getReqInfo(req);
+    const address = reqInfo.mbAddress;
+    const count = reqInfo.mbCount;
+    const type = req.query.type;
+    const values = req.body;
+
+    res.setHeader('Content-Type', 'application/json');
+
+    writeValues(type, address, count, values);
+
+    logRequest("set", type, address, count, values);
+    res.send(JSON.stringify(values));
+})
+
+/**
+ * Server start
+ */
+app.listen(port, () => {
+    console.log(`Admin server listening on port ${port}`)
+})
