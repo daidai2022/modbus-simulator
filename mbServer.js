@@ -134,13 +134,11 @@ const preProcess = function (request) {
         type = type.slice(0, -1);
     }
 
-    if (adminAddr !== undefined) {
-        let data = doRequest(action, type, address, count, values);
-        if (Array.isArray(data) && count === data.length) {
-            let buffer = getBuffer(type);
-            for (let index = 0; index < count; index++) {
-                buffer.writeUInt16BE(data[index], (address + index) * 2);
-            }
+    let data = doRequest(action, type, address, count, values);
+    if (Array.isArray(data) && count === data.length) {
+        let buffer = getBuffer(type);
+        for (let index = 0; index < count; index++) {
+            buffer.writeUInt16BE(data[index], (address + index) * 2);
         }
     }
 
