@@ -20,11 +20,34 @@ const app = express();
 const port = 8000;
 var data = {};
 
+const DEFAULT_VALUE = 6;
+
+const CHANGING_VALUE = {
+    enable: true,
+    type: "holding",
+    addr: 30,
+    min: 300,
+    max: 400
+}
+
 const readValues = function (type, address, count) {
     let res = [];
     const buf = data[type];
     for (let i = 0; i < count; i++) {
-        res.push(buf[address + i] !== undefined ? buf[address + i] : 0);
+        let v = (buf !== undefined && (buf[address + i] !== undefined)) ? buf[address + i] : DEFAULT_VALUE;
+        if(CHANGING_VALUE.enable
+            && (type === CHANGING_VALUE.type)
+            && ((address + i) === CHANGING_VALUE.addr)) {
+            if ((CHANGING_VALUE.current === undefined)
+                || (CHANGING_VALUE.current < CHANGING_VALUE.min)
+                || (CHANGING_VALUE.current > CHANGING_VALUE.max)) {
+                CHANGING_VALUE.current = CHANGING_VALUE.min;
+            } else {
+                CHANGING_VALUE.current += 1;
+            }
+            v = CHANGING_VALUE.current;
+        }
+        res.push(v);
     }
     return res;
 }
@@ -63,7 +86,8 @@ const doRequest = function (action, type, address, count, values) {
         } else {
             switch (action) {
                 case "read": {
-                    response = readValues(type, address, count);
+                    console.log(`aaa ${type} ${address} ${count}`)
+			response = readValues(type, address, count);
                     break;
                 }
                 case "write": {
@@ -73,7 +97,7 @@ const doRequest = function (action, type, address, count, values) {
             }
         }
     } catch (error) {
-        
+	console.log(error)
     }
     return response;
 }
@@ -101,7 +125,7 @@ const logAction = function (action, type, address, count, values) {
                 value.push(buffer.readUInt16BE((address + index) * 2));
             }
             console.log(`  <-- ${action} ${type}: Addr: ${address} => ${JSON.stringify(value)} (${count})`)
-            
+
             break;
         }
     }
@@ -140,6 +164,8 @@ const preProcess = function (request) {
         for (let index = 0; index < count; index++) {
             buffer.writeUInt16BE(data[index], (address + index) * 2);
         }
+    } else {
+       console.log(`count=${data?.length}`)
     }
 
     logAction(action, type, address, count, values);
